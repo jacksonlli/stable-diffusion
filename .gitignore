@@ -1,0 +1,4 @@
+stablediffusion/checkpoints
+stablediffusion/outputs
+*.egg-info
+outputs

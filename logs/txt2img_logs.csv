@@ -1,0 +1,2 @@
+prompt,negative_prompt,outdir,skip_grid,skip_save,ddim_steps,fixed_code,ddim_eta,n_iter,H,W,C,f,n_samples,n_rows,scale,device,from_file,seed,unet_bs,turbo,precision,format,sampler,ckpt
+highly detailed portrait of pink batman ,"deformed, out of frame, duplicate",outputs/txt2img-samples,False,False,30,False,0.0,1,512,512,4,8,1,0,7.5,cuda,,,1,False,full,png,plms,stable_diffusion\checkpoints\v1-5-pruned-emaonly.ckpt
