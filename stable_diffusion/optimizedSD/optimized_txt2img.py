@@ -180,7 +180,7 @@ def main(
                     modelCS.to(device)
                     uc = None
                     if negative_prompt is not None and negative_prompt != "":
-                        uc = modelCS.get_learned_conditioning(negative_prompt)
+                        uc = modelCS.get_learned_conditioning(batch_size * [negative_prompt])
                     elif scale != 1.0 :
                         uc = modelCS.get_learned_conditioning(batch_size * [""])
                     if isinstance(prompts, tuple):
