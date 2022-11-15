@@ -91,7 +91,6 @@ def main(
 
     tic = time.time()
     os.makedirs(outdir, exist_ok=True)
-    outpath = outdir
 
     if seed == None:
         seed = randint(0, 1000000)
@@ -172,7 +171,7 @@ def main(
         for n in trange(n_iter, desc="Sampling"):
             for prompts in tqdm(data, desc="data"):
 
-                sample_path = os.path.join(outpath, "_".join(re.split(":| ", prompts[0])))[:150]
+                sample_path = outdir
                 os.makedirs(sample_path, exist_ok=True)
                 base_count = len(os.listdir(sample_path))
 
