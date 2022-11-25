@@ -1,5 +1,5 @@
-stablediffusion/checkpoints
-stablediffusion/outputs
+stable_diffusion/checkpoints/*
+outputs
 *.egg-info
 outputs
 *.pyc
