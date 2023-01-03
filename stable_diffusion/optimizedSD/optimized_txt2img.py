@@ -95,8 +95,8 @@ def main(
     if seed == None:
         seed = randint(0, 1000000)
     seed_everything(seed)
-
-
+    if not ckpt:
+        ckpt=DEFAULT_CKPT
     sd = load_model_from_config(f"{ckpt}")
     li, lo = [], []
     for key, _ in sd.items():
@@ -123,12 +123,12 @@ def main(
     model.unet_bs = unet_bs
     model.cdevice = device
     model.turbo = turbo
-
+    
     modelCS = instantiate_from_config(config.modelCondStage)
     _, _ = modelCS.load_state_dict(sd, strict=False)
     modelCS.eval()
     modelCS.cond_stage_model.device = device
-
+    modelCS.to(device)
     modelFS = instantiate_from_config(config.modelFirstStage)
     _, _ = modelFS.load_state_dict(sd, strict=False)
     modelFS.eval()
@@ -218,11 +218,11 @@ def main(
                         x_T=start_code,
                         sampler = sampler,
                     )
-
                     modelFS.to(device)
 
                     print(samples_ddim.shape)
                     print("saving images")
+
                     for i in range(batch_size):
 
                         x_samples_ddim = modelFS.decode_first_stage(samples_ddim[i].unsqueeze(0))
@@ -242,6 +242,7 @@ def main(
                             time.sleep(1)
                     del samples_ddim
                     print("memory_final = ", torch.cuda.memory_allocated() / 1e6)
+    
 
     toc = time.time()
 
