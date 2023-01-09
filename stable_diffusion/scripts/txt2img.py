@@ -1,6 +1,7 @@
-import argparse, os, sys, glob
+import argparse, os, gc
 from pathlib import Path
 import argparse
+from random import randint
 import torch
 import numpy as np
 from omegaconf import OmegaConf
@@ -18,6 +19,8 @@ from stable_diffusion.ldm.util import instantiate_from_config
 from stable_diffusion.ldm.models.diffusion.ddim import DDIMSampler
 from stable_diffusion.ldm.models.diffusion.plms import PLMSSampler
 from transformers import logging
+from stable_diffusion.scripts.upscale import upscale
+from stable_diffusion.scripts.gfpgan import main as gfpgan
 
 
 logging.set_verbosity_error()
@@ -73,10 +76,17 @@ def main(
         turbo:bool=False,
         precision:str="full",
         format:str="png",
-        sampler:str="plms",
         ckpt:str=DEFAULT_CKPT,
         plms:bool = True,
         n_rows=0,
+        upscale_strength=0.3,
+        upscale_steps=150,
+        upscale_scale=None,
+        upscale_overlap=128,
+        upscale_passes=1,
+        real_ersgan_executable_path=None,
+        gfpgan_model=None,
+        only_keep_final=True,
         **kwargs
 ):
     '''
@@ -91,7 +101,7 @@ def main(
         H: image height, in pixel space
         W: image width, in pixel space
         C: latent channels
-        f: downsampling facto
+        f: downsampling factor
         n_samples: how many samples to produce for each given prompt. A.k.a. batch size
         scale: unconditional guidance scale: eps = eps(x, empty) + scale * (eps(x, cond) - eps(x, empty))
         device: specify GPU (cuda/cuda:0/cuda:1/...)
@@ -101,10 +111,12 @@ def main(
         turbo: Reduces inference time on the expense of 1GB VRAM"
         precision: evaluate at this precision
         format: output image format
-        sampler: sampler
+        plms: sampler plms or ddim
+        real_ersgan_executable_path: if provided, will be used to upscale the image 4x
         ckpt: path to checkpoint of model
     '''
-
+    if seed == None:
+        seed = randint(0, 1000000)
     seed_everything(seed)
 
     config = OmegaConf.load(f"{CONFIG}")
@@ -141,6 +153,8 @@ def main(
     if fixed_code:
         start_code = torch.randn([n_samples, C, H // f, W // f], device=device)
 
+    generated_imgs = []
+
     precision_scope = autocast if precision=="autocast" else nullcontext
     with torch.no_grad():
         with precision_scope("cuda"):
@@ -172,13 +186,54 @@ def main(
                         x_samples_ddim = torch.clamp((x_samples_ddim + 1.0) / 2.0, min=0.0, max=1.0)
                 for x_sample in x_samples_ddim:
                     x_sample = 255. * rearrange(x_sample.cpu().numpy(), 'c h w -> h w c')
+                    img_path = os.path.join(outpath, "seed_" + str(seed) + "_" + f"{base_count:05}.{format}")
                     Image.fromarray(x_sample.astype(np.uint8)).save(
-                        os.path.join(outpath, "seed_" + str(seed) + "_" + f"{base_count:05}.{format}")
+                        img_path
                     )
+                    generated_imgs.append(img_path)
                     base_count += 1
 
                 toc = time.time()
+                torch.cuda.empty_cache()
+                gc.collect()
+    if real_ersgan_executable_path:
+        if gfpgan_model:
+            gfpgan_generated_imgs = gfpgan(
+                input=generated_imgs,
+                output=outdir,
+                version='1.4',
+                model_path=gfpgan_model,
+                upscale=1,
+            )
+            if only_keep_final:
+                for file in generated_imgs:
+                    os.remove(file)
+            generated_imgs = gfpgan_generated_imgs
 
+        generated_imgs = upscale(
+            images=generated_imgs,
+            model=model,
+            W=W,
+            H=H,
+            realesrgan_executable=real_ersgan_executable_path,
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            strength=upscale_strength,
+            detail_steps=upscale_steps,
+            detail_scale=upscale_scale if upscale_scale else scale,
+            gobig_overlap=upscale_overlap,
+            device='cuda',
+            precision='full',
+            passes=upscale_passes,
+            only_keep_final=only_keep_final
+        )
+
+    if gfpgan_model:
+        gfpgan(input=generated_imgs, output=outdir, version='1.4', model_path=gfpgan_model)
+        if only_keep_final:
+            for file in generated_imgs:
+                os.remove(file)
+        
     print(f"Your samples are ready and waiting for you here: \n{outpath} \n"
           f" \nEnjoy.")
 
